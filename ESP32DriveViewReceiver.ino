@@ -1,77 +1,69 @@
 // ========================================================================================
 //      Meine Welt in meinem Kopf
 // ========================================================================================
-// Projekt:       ESP32 Drive View - Remote Controller
+// Projekt:       ESP32 Drive View - Receiver
 // Author:        Johannes P. Langner
-// Controller:    XIAO ESP32-S3
+// Controller:    XIAO ESP32-S3 Sense with cam
 // Actor:         TFT GC9A01, XY-Analog Stick
 // Description:   
 // Stand:         17.08.2026
 // ========================================================================================
 
-// ESP32-S3 Sense with camera
+#include <Arduino.h>
 
 // ==================================================
 // Camera
+// TIP: need an enabled PSRAM
 #define CAMERA_MODEL_XIAO_ESP32S3 // Has PSRAM
 
 #include "esp_camera.h"
 #include "camera_pins.h"
 
+// ========================================================================================
+// Access Point and network server
+#include <WiFi.h>
+#include <NetworkClient.h>
+#include <WiFiAP.h>
 
 const char *ssid = "fpv_remotecontroller";
 const char *password = "12345678";
 
+const char* serverIP = "192.168.4.2";  // IP des ESP32-Servers
+const uint16_t serverPort = 8080;         // Port des Servers
+WiFiClient _client;
+
+long _timeoutForReconnect = 30;
+
+// ========================================================================================
+// any
+
+
 long _lastMillis = 0;
-
-#include <Arduino.h>
-#include <WiFi.h>
-// Festgelegte IP-Konfiguration
-IPAddress localIP(192, 168, 4, 2);    // Gewünschte IP des ESP32
-IPAddress gateway(192, 168, 4, 1);      // Router-IP
-IPAddress subnet(255, 255, 255, 0);     // Subnetzmaske
-IPAddress dns(255, 255, 255, 0);              // DNS (z. B. Google DNS)
-
-int _serverPort = 8080;  
-WiFiServer _server;
 
 
 void setup() {
   
-  // activ signal LED
-  //pinMode(LED_BUILTIN, OUTPUT);
-
   Serial.begin(115200);
 
   Serial.println("FPV Receiver Controller");
 
+  // ----------------------------------------------
   // init camera
   cameraInit();
 
-  // setup WLAN
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  WiFi.config(localIP, gateway, subnet, dns); // Statische IP setzen
-  WiFi.setAutoReconnect(true);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print("WiFi Status: "); Serial.println(WiFi.status());
-    Serial.print("Hostname: "); Serial.println(WiFi.getHostname());
-    Serial.print("Auto Reconnect: "); Serial.println(WiFi.getAutoReconnect());
-
-    for(int i = 0; i < 40; i++) {
-      Serial.print(".");
-    }
-
-    Serial.println("");
-
-    delay(100);
+  // ----------------------------------------------
+  // setup access point
+  if (!WiFi.softAP(ssid, password)) {
+    log_e("Soft AP creation failed.");
+    Serial.println("Soft AP creation failed.");
+    while (1);
   }
 
-  Serial.println("WiFi connected! ");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(myIP);
 
+  // ----------------------------------------------
   // start server
   Serial.print("start server with port number ");
   char buffer[12];
