@@ -101,11 +101,12 @@ void loop() {
     Serial.println("connection accept");
 
     while(localclient.connected()){
-      Serial.println("connected ");
+      //Serial.println("connected ");
 
       camera_fb_t *fb = esp_camera_fb_get();
       if(fb){
-        Serial.println("");
+        //Serial.println("");
+        
       }
 
       // send picture size
@@ -122,9 +123,9 @@ void loop() {
       // Send jpeg
       localclient.write(fb->buf, fb->len);
 
-      char buffer[12];
-      sprintf(buffer, "%d", fb->len);
-      Serial.print("jpg size "); Serial.println(buffer);
+      //char buffer[12];
+      //sprintf(buffer, "%d", fb->len);
+      //Serial.print("jpg size "); Serial.println(buffer);
 
       esp_camera_fb_return(fb);
 
@@ -133,7 +134,7 @@ void loop() {
     }
 
     localclient.stop();
-    Serial.println("Connection break!");
+    //Serial.println("Connection break!");
 
     for(int i = 0; i < 4; i++) {
       delay(1000);
