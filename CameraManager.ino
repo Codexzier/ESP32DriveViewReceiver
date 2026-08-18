@@ -37,7 +37,7 @@ void cameraInit() {
     // picture setup
     // config.pixel_format = PIXFORMAT_RGB565; // bitmap
     config.pixel_format = PIXFORMAT_JPEG; 
-    config.jpeg_quality = 10; 
+    config.jpeg_quality = 12; 
     config.frame_size = FRAMESIZE_240X240;
 
     config.fb_count = 1;

@@ -107,7 +107,25 @@ void loop() {
       if(fb){
         Serial.println("");
       }
+
+      // send picture size
+      uint32_t jpgSize = fb->len;
+      uint8_t sizeBytes[4] = {
+        (uint8_t)(jpgSize >> 24) & 0xFF,  // MSB
+        (uint8_t)(jpgSize >> 16) & 0xFF,
+        (uint8_t)(jpgSize >> 8) & 0xFF,
+        (uint8_t)jpgSize & 0xFF          // LSB
+      };
+
+      localclient.write(sizeBytes, (size_t)4);
+
+      // Send jpeg
       localclient.write(fb->buf, fb->len);
+
+      char buffer[12];
+      sprintf(buffer, "%d", fb->len);
+      Serial.print("jpg size "); Serial.println(buffer);
+
       esp_camera_fb_return(fb);
 
       delay(10);
