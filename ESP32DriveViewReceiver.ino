@@ -41,7 +41,7 @@ long _timeoutForReconnect = 30;
 // ========================================================================================
 // any
 
-long _lastMillis = 0;
+unsigned long _lastMillis = 0;
 
 
 void setup() {
@@ -87,18 +87,17 @@ void setup() {
 
 void loop() {
   
-  long actual = millis();
-  if(actual < _lastMillis + 2000) {
-     return;
+  unsigned long actual = millis();
+  if(actual - _lastMillis >= 2000) {
+     _lastMillis = actual;
+    connectToServer();
    }
-   _lastMillis = actual;
-   connectToServer();
-
+   
   if(_client) {
 
     Serial.println("connection accept");
 
-    while(_client.connected()){
+    if(_client.connected()){
       Serial.println("connected ");
 
       camera_fb_t *fb = esp_camera_fb_get();
@@ -106,22 +105,46 @@ void loop() {
         Serial.println("");
       }
       _client.write(fb->buf, fb->len);
+      Serial.println("Picture has send!");
       esp_camera_fb_return(fb);
+
+
+      // Warte auf Bestätigung vom Server
+      unsigned long startTime = millis();
+      bool ackReceived = false;
+      while (millis() - startTime < 1000) {  // Warte max. 1 Sekunde auf ACK
+        if (_client.available()) {
+          String response = _client.readStringUntil('\n');
+          if (response == "ACK") {
+            ackReceived = true;
+            Serial.println("Server has responsed!");
+            break;
+          }
+          Serial.println("Wait for response!");
+        }
+        else {
+          Serial.println("Connection break! No ACK");
+        }
+        delay(10);
+      }
+
 
       delay(10);
     }
-
-    _client.stop();
-    Serial.println("Connection break!");
-
-    for(int i = 0; i < 4; i++) {
+    else {
       delay(1000);
-      Serial.print("Countdown: "); Serial.println(i, DEC);
+      //_client.stop();
+      Serial.println("Connection break!");
     }
+
+    // for(int i = 0; i < 4; i++) {
+    //   delay(1000);
+    //   Serial.print("Countdown: "); Serial.println(i, DEC);
+    // }
     Serial.println();
   }
 
-  Serial.println("try in two second");  
+  //Serial.println("try to reconnect");  
 }
 
 void connectToServer() {
@@ -130,12 +153,14 @@ void connectToServer() {
   sprintf(buffer, "%d", _serverPort);
   Serial.println(buffer);
 
-  while(!_client.connect(_serverIP, _serverPort)){
-
-    Serial.println("No connection with a client!");
-    delay(1000);
+if(!_client.connected()) {
+  if(_client.connect(_serverIP, _serverPort)){
     Serial.print("Connecto to IP "); Serial.println(_serverIP);
   }
+  else {
+    Serial.println("No connection with a client!");
+  }
+}
 
 Serial.print("IP: "); Serial.println(WiFi.localIP());
 
