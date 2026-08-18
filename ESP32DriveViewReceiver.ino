@@ -128,7 +128,8 @@ void loop() {
 
       esp_camera_fb_return(fb);
 
-      delay(10);
+      updateFPS();
+      delay(5);
     }
 
     localclient.stop();
@@ -144,3 +145,23 @@ void loop() {
   Serial.println("try in two second");  
 }
 
+void updateFPS() {
+  static uint32_t lastCheckTime = 0; // Zeitpunkt der letzten Messung
+  static uint32_t frameCount = 0;    // Zähler für die Frames
+  static float currentFPS = 0.0;      // Gespeicherter FPS-Wert
+
+  frameCount++; // Wird bei jedem Aufruf (jedes gesendete Bild) erhöht
+
+  // Prüfen, ob 1 Sekunde (1000 ms) vergangen ist
+  if (millis() - lastCheckTime >= 1000) {
+    // FPS berechnen (für den Fall, dass das Intervall leicht abweicht)
+    currentFPS = (float)frameCount * 1000.0 / (millis() - lastCheckTime);
+    
+    // FPS auf der seriellen Schnittstelle ausgeben
+    Serial.printf("Gesendete Bilder/Sekunde (FPS): %.2f\n", currentFPS);
+
+    // Zähler und Timer zurücksetzen
+    frameCount = 0;
+    lastCheckTime = millis();
+  }
+}
