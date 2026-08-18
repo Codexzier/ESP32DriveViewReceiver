@@ -30,14 +30,17 @@ void cameraInit() {
 
     config.xclk_freq_hz = 20000000;
 
-    // Bitmap Einstellung
-    config.pixel_format = PIXFORMAT_RGB565;
+    // mode
     config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
     config.fb_location = CAMERA_FB_IN_PSRAM;
-    config.jpeg_quality = 12;
-    config.fb_count = 1;
 
+    // picture setup
+    // config.pixel_format = PIXFORMAT_RGB565; // bitmap
+    config.pixel_format = PIXFORMAT_JPEG; 
+    config.jpeg_quality = 10; 
     config.frame_size = FRAMESIZE_240X240;
+
+    config.fb_count = 1;
     //#if CONFIG_IDF_TARGET_ESP32S3
     //  config.fb_count = 2;
     //#endif
@@ -45,7 +48,7 @@ void cameraInit() {
 
     Serial.println("init camera");
 
-    // camera init
+    // camera execute inititlize
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
         Serial.printf("Camera init failed with error 0x%x", err);
