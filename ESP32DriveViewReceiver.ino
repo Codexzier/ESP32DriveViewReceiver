@@ -99,23 +99,24 @@ void loop() {
   if(localclient) {
 
     Serial.println("connection accept");
+    camera_fb_t *fb = NULL;
 
     while(localclient.connected()){
       //Serial.println("connected ");
 
-      camera_fb_t *fb = esp_camera_fb_get();
-      if(fb){
+      fb = esp_camera_fb_get();
+      if(!fb){
         //Serial.println("");
-        
+        continue;
       }
 
       // send picture size
       uint32_t jpgSize = fb->len;
       uint8_t sizeBytes[4] = {
-        (uint8_t)(jpgSize >> 24) & 0xFF,  // MSB
-        (uint8_t)(jpgSize >> 16) & 0xFF,
-        (uint8_t)(jpgSize >> 8) & 0xFF,
-        (uint8_t)jpgSize & 0xFF          // LSB
+        (jpgSize >> 24) & 0xFF,  // MSB
+        (jpgSize >> 16) & 0xFF,
+        (jpgSize >> 8) & 0xFF,
+        jpgSize & 0xFF          // LSB
       };
 
       localclient.write(sizeBytes, (size_t)4);
@@ -128,9 +129,10 @@ void loop() {
       //Serial.print("jpg size "); Serial.println(buffer);
 
       esp_camera_fb_return(fb);
+      fb = NULL;
 
       updateFPS();
-      delay(5);
+      delay(2);
     }
 
     localclient.stop();

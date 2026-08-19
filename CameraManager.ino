@@ -19,9 +19,7 @@ void cameraInit() {
     config.pin_vsync = VSYNC_GPIO_NUM;
     config.pin_href = HREF_GPIO_NUM;
 
-    //config.pin_sscb_sda = SIOD_GPIO_NUM;
     config.pin_sccb_sda = SIOD_GPIO_NUM;
-    //config.pin_sscb_scl = SIOC_GPIO_NUM;
     config.pin_sccb_scl = SIOC_GPIO_NUM;
 
     // not connected
@@ -37,10 +35,12 @@ void cameraInit() {
     // picture setup
     // config.pixel_format = PIXFORMAT_RGB565; // bitmap
     config.pixel_format = PIXFORMAT_JPEG; 
-    config.jpeg_quality = 12; 
+    config.jpeg_quality = 10; 
     config.frame_size = FRAMESIZE_240X240;
 
-    config.fb_count = 1;
+    config.fb_count = 2;
+    config.grab_mode = CAMERA_GRAB_LATEST;
+
     //#if CONFIG_IDF_TARGET_ESP32S3
     //  config.fb_count = 2;
     //#endif
