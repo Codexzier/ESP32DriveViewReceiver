@@ -17,6 +17,13 @@
 #include "esp_camera.h"
 #include "camera_pins.h"
 
+// Lokal gespeicherte WLAN Zugang, nur bei mir. 
+// falls ich vergesse das hier auszukommeniteren. 
+// Einfach entfernen und die felder ssid und password für 
+// den WLAN zugang ausfüllen.
+#include "WlanData.h" 
+WlanConnection wd;
+
 const char *ssid = "fpv_remotecontroller";
 const char *password = "12345678";
 
@@ -47,8 +54,9 @@ void setup() {
 
   // setup WLAN
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  WiFi.config(localIP, gateway, subnet, dns); // Statische IP setzen
+  WiFi.begin(wd.getSsid(), wd.getPassword());
+  //WiFi.begin(ssid, password);
+  //WiFi.config(localIP, gateway, subnet, dns); // Statische IP setzen
   WiFi.setAutoReconnect(true);
 
   while (WiFi.status() != WL_CONNECTED) {
