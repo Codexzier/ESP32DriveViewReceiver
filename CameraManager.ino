@@ -1,4 +1,10 @@
-void cameraInit() {
+// ========================================================================================
+//      Kamera
+// ========================================================================================
+
+bool _cameraReady = false;
+
+bool cameraInit(const Settings &s) {
   camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
     config.ledc_timer = LEDC_TIMER_0;
@@ -28,32 +34,51 @@ void cameraInit() {
 
     config.xclk_freq_hz = 20000000;
 
-    // mode
-    config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-    config.fb_location = CAMERA_FB_IN_PSRAM;
-
     // picture setup
-    // config.pixel_format = PIXFORMAT_RGB565; // bitmap
-    config.pixel_format = PIXFORMAT_JPEG; 
-    config.jpeg_quality = 10; 
-    config.frame_size = FRAMESIZE_240X240;
+    config.pixel_format = PIXFORMAT_JPEG;
+    config.jpeg_quality = s.jpegQuality;
 
-    config.fb_count = 2;
-    config.grab_mode = CAMERA_GRAB_LATEST;
-
-    //#if CONFIG_IDF_TARGET_ESP32S3
-    //  config.fb_count = 2;
-    //#endif
-    //}
+    // Die Puffer werden fuer die groesste Aufloesung angelegt, damit die
+    // Aufloesung spaeter zur Laufzeit ohne Neuinitialisierung umgestellt werden kann.
+    if (psramFound()) {
+      config.frame_size = FRAMESIZE_UXGA;
+      config.fb_location = CAMERA_FB_IN_PSRAM;
+      config.fb_count = 2;
+      config.grab_mode = CAMERA_GRAB_LATEST;
+    } else {
+      Serial.println("WARNUNG: kein PSRAM - bitte 'OPI PSRAM' aktivieren");
+      config.frame_size = FRAMESIZE_VGA;
+      config.fb_location = CAMERA_FB_IN_DRAM;
+      config.fb_count = 1;
+      config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
+    }
 
     Serial.println("init camera");
 
     // camera execute inititlize
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
-        Serial.printf("Camera init failed with error 0x%x", err);
-        delay(1000);
-        return;
+        Serial.printf("Camera init failed with error 0x%x\n", err);
+        _cameraReady = false;
+        return false;
     }
+
+    _cameraReady = true;
+    cameraSetFrameSize(s.frameSize);
+    return true;
 }
 
+bool cameraSetFrameSize(uint8_t frameSize) {
+  if (!_cameraReady) return false;
+  if (!psramFound() && frameSize > FRAMESIZE_VGA) return false;
+  sensor_t *sensor = esp_camera_sensor_get();
+  if (!sensor) return false;
+  return sensor->set_framesize(sensor, (framesize_t)frameSize) == 0;
+}
+
+bool cameraSetQuality(uint8_t quality) {
+  if (!_cameraReady) return false;
+  sensor_t *sensor = esp_camera_sensor_get();
+  if (!sensor) return false;
+  return sensor->set_quality(sensor, quality) == 0;
+}

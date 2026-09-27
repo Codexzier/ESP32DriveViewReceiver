@@ -4,9 +4,24 @@
 // Projekt:       ESP32 Drive View - Receiver
 // Author:        Johannes P. Langner
 // Controller:    XIAO ESP32-S3 Sense with cam
-// Actor:         TFT GC9A01, XY-Analog Stick
-// Description:   
-// Stand:         17.08.2026
+// Description:   FPV Fernsteuerung fuer ein Modellauto.
+//                Der ESP32 startet einen eigenen WLAN Access Point und hostet eine
+//                Webseite mit Videostream als Hintergrund und Steuerelementen
+//                (Gas stufenlos, Lenkung, Licht, Hupe) sowie eine Setup-Seite.
+//
+//                WLAN:     SSID "ESP32-FPV-Driver", Passwort "Esp32FpsDriver"
+//                Webseite: http://192.168.4.1/        (Steuerung)
+//                          http://192.168.4.1/setup   (Einstellungen)
+//
+//                Ausgaenge:
+//                  D0 (GPIO1) Vorwaerts/Rueckwaerts  Servo-PWM 50 Hz
+//                  D1 (GPIO2) Lenkung links/rechts   Servo-PWM 50 Hz
+//                  D2 (GPIO3) Licht                  Servo-PWM 50 Hz (Aus/An Pulsbreite)
+//                  D3 (GPIO4) Hupe                   Rechteck fuer Piezo (Standard 2,7 kHz)
+//
+//                Arduino IDE: Board "XIAO_ESP32S3", PSRAM "OPI PSRAM",
+//                             Partition Scheme "Huge APP" oder "Default with spiffs"
+// Stand:         27.09.2026
 // ========================================================================================
 
 // ==================================================
@@ -17,154 +32,64 @@
 #include "esp_camera.h"
 #include "camera_pins.h"
 
-const char *ssid = "fpv_remotecontroller";
-const char *password = "12345678";
-
-long _lastMillis = 0;
-
 #include <Arduino.h>
 #include <WiFi.h>
-// setup static ip address
-IPAddress localIP(192, 168, 4, 2);      // wish IP of ESP32
-IPAddress gateway(192, 168, 4, 1);      // Router-IP
-IPAddress subnet(255, 255, 255, 0);     // Subnetzmaske
-IPAddress dns(255, 255, 255, 0);        // Base dns address
+#include <Preferences.h>
+#include <FS.h>
+#include <SD.h>
+#include <SPI.h>
+#include "esp_http_server.h"
+
+// Hinweis: alle Includes stehen hier in der Haupt-Datei, damit die von der
+// Arduino IDE erzeugten Funktionsprototypen die Typen kennen.
+#include "config.h"
+#include "web_pages.h"
 
 // ==================================================
-// Server
-int _serverPort = 5001;                 // 
-WiFiServer _server;
+// Access Point Adresse
+IPAddress apIP(192, 168, 4, 1);
+IPAddress apSubnet(255, 255, 255, 0);
 
+// ==================================================
+// globaler Zustand
+Settings _settings;
+ControlState _control = { 0, 0, false, 0, 0 };
+const char *_settingsStorage = "Standard";
 
 void setup() {
-  
+
   Serial.begin(115200);
+  delay(200);
 
   Serial.println("FPV Receiver Controller");
 
+  // Einstellungen laden (NVS, sonst SD-Karte, sonst Standard)
+  _settingsStorage = settingsLoad(_settings);
+  Serial.printf("Einstellungen geladen aus: %s\n", _settingsStorage);
+
+  // Ausgaenge sofort in Neutralstellung bringen
+  outputsInit(_settings);
+  outputsUpdate(_control, _settings);
+
   // init camera
-  cameraInit();
+  cameraInit(_settings);
 
-  // setup WLAN
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  WiFi.config(localIP, gateway, subnet, dns); // Statische IP setzen
-  WiFi.setAutoReconnect(true);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print("WiFi Status: "); Serial.println(WiFi.status());
-    Serial.print("Hostname: "); Serial.println(WiFi.getHostname());
-    Serial.print("Auto Reconnect: "); Serial.println(WiFi.getAutoReconnect());
-
-    for(int i = 0; i < 40; i++) {
-      Serial.print(".");
-    }
-
-    Serial.println("");
-
-    delay(100);
+  // WLAN Access Point starten
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(apIP, apIP, apSubnet);
+  if (!WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, 0, AP_MAX_CLIENTS)) {
+    Serial.println("Access Point konnte nicht gestartet werden!");
   }
+  WiFi.setSleep(false);   // geringere Latenz fuer Stream und Steuerung
 
-  Serial.println("WiFi connected! ");
+  Serial.printf("Access Point: %s  Passwort: %s\n", AP_SSID, AP_PASSWORD);
   Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
+  Serial.println(WiFi.softAPIP());
 
-  // start server
-  Serial.print("start server with port number ");
-  char buffer[12];
-  sprintf(buffer, "%d", _serverPort);
-  Serial.println(buffer);
-
-  _server.begin(_serverPort); 
-
-  _lastMillis = millis();
-
-  Serial.println("Server started! ");
+  webServerStart();
 }
 
 void loop() {
-
-  
-  long actual = millis();
-  if(actual < _lastMillis + 2000) {
-     return;
-   }
-   _lastMillis = actual;
-
-  Serial.println("------------------------------");
-  Serial.print("IP: "); Serial.println(WiFi.localIP());
-  Serial.println("wait for client connecting");
-  WiFiClient localclient = _server.accept();
-
-  if(localclient) {
-
-    Serial.println("connection accept");
-    camera_fb_t *fb = NULL;
-
-    while(localclient.connected()){
-      //Serial.println("connected ");
-
-      fb = esp_camera_fb_get();
-      if(!fb){
-        //Serial.println("");
-        continue;
-      }
-
-      // send picture size
-      uint32_t jpgSize = fb->len;
-      uint8_t sizeBytes[4] = {
-        (jpgSize >> 24) & 0xFF,  // MSB
-        (jpgSize >> 16) & 0xFF,
-        (jpgSize >> 8) & 0xFF,
-        jpgSize & 0xFF          // LSB
-      };
-
-      localclient.write(sizeBytes, (size_t)4);
-
-      // Send jpeg
-      localclient.write(fb->buf, fb->len);
-
-      //char buffer[12];
-      //sprintf(buffer, "%d", fb->len);
-      //Serial.print("jpg size "); Serial.println(buffer);
-
-      esp_camera_fb_return(fb);
-      fb = NULL;
-
-      updateFPS();
-      delay(2);
-    }
-
-    localclient.stop();
-    //Serial.println("Connection break!");
-
-    for(int i = 0; i < 4; i++) {
-      delay(1000);
-      Serial.print("Countdown: "); Serial.println(i, DEC);
-    }
-    Serial.println();
-  }
-
-  Serial.println("try in two second");  
-}
-
-void updateFPS() {
-  static uint32_t lastCheckTime = 0; // Zeitpunkt der letzten Messung
-  static uint32_t frameCount = 0;    // Zähler für die Frames
-  static float currentFPS = 0.0;      // Gespeicherter FPS-Wert
-
-  frameCount++; // Wird bei jedem Aufruf (jedes gesendete Bild) erhöht
-
-  // Prüfen, ob 1 Sekunde (1000 ms) vergangen ist
-  if (millis() - lastCheckTime >= 1000) {
-    // FPS berechnen (für den Fall, dass das Intervall leicht abweicht)
-    currentFPS = (float)frameCount * 1000.0 / (millis() - lastCheckTime);
-    
-    // FPS auf der seriellen Schnittstelle ausgeben
-    Serial.printf("Gesendete Bilder/Sekunde (FPS): %.2f\n", currentFPS);
-
-    // Zähler und Timer zurücksetzen
-    frameCount = 0;
-    lastCheckTime = millis();
-  }
+  outputsUpdate(_control, _settings);
+  delay(5);
 }
